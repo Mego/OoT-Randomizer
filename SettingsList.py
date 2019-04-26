@@ -494,6 +494,7 @@ setting_infos = [
         min            = 1, 
         max            = 255, 
         default        = 1,
+        shared         = True,
     ),
     Scale('player_num', 
         min            = 1, 
@@ -581,12 +582,15 @@ setting_infos = [
             in the forest.
 
             This is incompatible with start as adult.
+            This is also forced enabled when shuffling
+            "All Indoors" and/or "Overworld" entrances.
         ''',
         default        = True,
         shared         = True,
         gui_params     = {
             'randomize_key': 'randomize_settings',
         },
+        dependency     = lambda settings: True if settings.entrance_shuffle in ['all-indoors', 'all'] else None,
     ),
     Checkbutton(
         name           = 'open_kakariko',
@@ -706,28 +710,33 @@ setting_infos = [
         },
     ),
     Combobox(
-        name           = 'logic_rules',
-        default        = 'glitchless',
-        choices        = {
-            'glitchless': 'Glitchless',
-            'none':       'No Logic',
-        },
-        gui_text       = 'Logic Rules',
-        gui_group      = 'world',
-        gui_tooltip    = '''\
-            Sets the rules the logic uses
-            to determine accessibility.
+            name           = 'logic_rules',
+            default        = 'glitchless',
+            choices        = {
+                'glitchless': 'Glitchless',
+                'glitched':   'Glitched',
+                'none':       'No Logic',
+                },
+            gui_text       = 'Logic Rules',
+            gui_group      = 'world',
+            gui_tooltip    = '''\
+                             Sets the rules the logic uses
+                             to determine accessibility.
+        
+                             'Glitchless': No glitches are
+                             required, but may require some
+                             minor tricks
 
-            'Glitchless': No glitches are
-            required, but may require some
-            minor tricks
-
-            'No Logic': All locations are
-            considered available. May not
-            be beatable.
-        ''',
-        shared         = True,
-    ),
+                             'Glitched': Movement oriented
+                             glitches are likely required.
+                             No locations excluded.
+        
+                             'No Logic': All locations are
+                             considered available. May not
+                             be beatable.
+                             ''',
+            shared         = True,
+            ),
     Checkbutton(
         name           = 'all_reachable',
         gui_text       = 'All Locations Reachable',
@@ -840,7 +849,7 @@ setting_infos = [
             Ganondorf and Ganon will be skipped.
         ''',
         shared         = True,
-        dependency     = lambda settings: True if settings.entrance_shuffle == 'indoors' else None,
+        dependency     = lambda settings: True if settings.entrance_shuffle in ['simple-indoors', 'all-indoors', 'all'] else None,
     ),
     Checkbutton(
         name           = 'no_guard_stealth',
@@ -1065,9 +1074,11 @@ setting_infos = [
         name           = 'entrance_shuffle',
         default        = 'off',
         choices        = {
-            'off':       'Off',
-            'dungeons':  'Dungeons Only',
-            'indoors':   'All Indoors',
+            'off':              'Off',
+            'dungeons':         'Dungeons Only',
+            'simple-indoors':   'Simple Indoors',
+            'all-indoors':      'All Indoors',
+            'all':              'All Indoors & Overworld',
         },
         gui_text       = 'Entrance Shuffle',
         gui_group      = 'shuffle',
@@ -1078,41 +1089,33 @@ setting_infos = [
             Shuffle dungeon entrances with each other, including Bottom 
             of the Well, Ice Cavern, and Gerudo Training Grounds. 
             However, Ganon's Castle is not shuffled.
-
             Additionally, the entrances of Deku Tree, Fire Temple and 
-            Bottom of the Well are opened for both adult and child to 
-            improve randomization, and accessing the Fire Temple from 
-            Bolero is always in logic for child regardless of Tunic settings.
+            Bottom of the Well are opened for both adult and child.
 
-            Blue warps will return link to the new dungeons entrance. 
-            Lake Hylia will be filled for adult after defeating Morpha.
-
-            Master Quest dungeons are not supported yet, coming soon!
+            'Simple Indoors':
+            Shuffle dungeon entrances along with Grottos and simple
+            Interior entrances (i.e. most Houses and Great Fairies).
 
             'All Indoors':
-            Shuffle dungeon entrances along with grotto and interior 
-            entrances as described below. All entrances are still only 
-            shuffled within their own pool. This means, for example, 
-            that dungeons are only shuffled with other dungeons.
+            Extended version of 'Simple Indoors' with some extra entrances:
+            Windmill, Link's House and Temple of Time.
 
-            Grottos: All grottos in the game including small Fairy Fountains 
-            and the Lost Woods Stage.
-
-            Interiors: All Houses and Great Fairies in the game.
-            For now, this excludes Richard's house, the Windmill, the 
-            Kakariko Potion Shop, Link's House and Temple of Time.
-            Adult trade quest timers are disabled when shuffling this pool,
-            and it forces Skip Tower Escape Sequence to be enabled for now.
+            'All Indoors & Overworld':
+            Same as 'All Indoors' but with Overworld loading zones shuffled
+            in a new separate pool. Owl drop positions are also randomized.
         ''',
         shared         = True,
         gui_params     = {
             'randomize_key': 'randomize_settings',
             'distribution':  [
-                ('off', 2),
+                ('off', 4),
                 ('dungeons', 1),
-                ('indoors', 1),
+                ('simple-indoors', 1),
+                ('all-indoors', 1),
+                ('all', 1),
             ],
         },
+        dependency     = lambda settings: 'off' if settings.logic_rules == 'glitched' else None,
     ),
     Combobox(
         name           = 'shuffle_scrubs',
@@ -1376,14 +1379,14 @@ setting_infos = [
             If set, a random number of dungeons
             will have Master Quest designs.
         ''',
-        dependency     = lambda settings: False if settings.entrance_shuffle != 'off' else None,
+        dependency     = lambda settings: False if settings.entrance_shuffle != 'off' or settings.logic_rules == 'glitched' else None,
         shared         = True,
         gui_params     = {
             'randomize_key': 'randomize_settings',
             'distribution': [
                 (True, 1),
             ],
-        },
+        }
     ),
     Scale(
         name           = 'mq_dungeons',
@@ -1404,11 +1407,13 @@ setting_infos = [
             12: All dungeons will have
             Master Quest redesigns.
             ''',
-        dependency     = lambda settings: 0 if settings.mq_dungeons_random or settings.entrance_shuffle != 'off' else None,
+
+        dependency     = lambda settings: 0 if settings.mq_dungeons_random or settings.entrance_shuffle != 'off' or settings.logic_rules == 'glitched' else None,
+
         shared         = True,
         gui_params     = {
             'randomize_key': 'randomize_settings',
-        },    
+        },
     ),
     Setting_Info(
         name           = 'disabled_locations', 
